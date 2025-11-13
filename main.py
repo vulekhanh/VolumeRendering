@@ -30,14 +30,21 @@ Notes:
 
 """
 
-import sys
-import os
-import argparse
+import sys, argparse, math, time
 import numpy as np
-import math
 import vispy.app
 import vispy.gloo as gloo
-from vispy.util.transforms import perspective, translate, rotate
+from vispy.util.transforms import perspective
+from vispy.visuals import TextVisual, transforms
+# Fix for VisPy's DPI bug when using TextVisual
+try:
+    import vispy.visuals.transforms as _vtrans
+    if getattr(_vtrans, 'dpi', None) is None:
+        _vtrans.dpi = 96
+except Exception:
+    pass
+if getattr(transforms, "dpi", None) is None:
+    transforms.dpi = 96.0  # default to 96 DPI for Windows / Qt
 
 
 # Try to import SimpleITK for medical file reading
@@ -114,7 +121,11 @@ class VolumeCanvas(vispy.app.Canvas):
             900, 700), title='GPU Volume Renderer')
         self.volume = volume
         self.spacing = np.array(spacing, dtype=np.float32)
-
+        # --- Initialize FPS counter early (before GPU setup) ---
+        self._last_time = time.time()
+        self._frames = 0
+        self._fps = 0.0
+        # self._fps_text.transforms.dpi = 96  # default DPI to avoid NoneType
         # normalize volume to 0..1
         vmin = float(np.min(volume))
         vmax = float(np.max(volume))
@@ -225,20 +236,29 @@ class VolumeCanvas(vispy.app.Canvas):
         proj = perspective(self._fov, aspect, self._near, self._far)
 
         model = np.eye(4, dtype=np.float32)
-        # scale to unit cube, apply rotations then translation
-        model = np.dot(model, safe_rotate(
-            self._rotation[0], np.array([1, 0, 0])))
-        model = np.dot(model, safe_rotate(
-            self._rotation[1], np.array([0, 1, 0])))
+        model = np.dot(model, safe_rotate(self._rotation[0], np.array([1, 0, 0])))
+        model = np.dot(model, safe_rotate(self._rotation[1], np.array([0, 1, 0])))
         model = safe_translate(model, [0.0, 0.0, self._translate[2]])
 
         mv = model
         inv_mv = np.linalg.inv(mv).astype(np.float32)
         self.program['u_inv_modelview'] = inv_mv
-        # camera pos in model space (we place camera at origin in view space)
         self.program['u_cam_pos'] = (0.0, 0.0, 0.0)
 
+        # Draw the volume
         self.program.draw('triangle_strip')
+
+        # --- FPS computation (1-second average) ---
+        now = time.time()
+        self._frames += 1
+        if now - self._last_time >= 1.0:
+            self._fps = self._frames / (now - self._last_time)
+            self._frames = 0
+            self._last_time = now
+            # update the window title — simple and reliable
+            self.title = f"GPU Volume Renderer — FPS: {self._fps:.1f}"
+            # debug
+            print(f"FPS: {self._fps:.1f}")
 
 
 # small helper function
