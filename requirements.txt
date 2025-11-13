@@ -1,0 +1,13 @@
+# Core rendering and visualization
+vispy>=0.14.0
+PyOpenGL>=3.1.7
+PyQt5>=5.15.0
+
+# Numerical and image processing
+numpy>=1.24.0
+SimpleITK>=2.2.0
+imageio>=2.34.0
+scipy>=1.11.0
+
+# Optional utilities
+matplotlib>=3.8.0
