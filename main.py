@@ -30,12 +30,19 @@ Notes:
 
 """
 
-import sys, argparse, math, time
+import sys
+import argparse
+import math
+import time
+import os
 import numpy as np
 import vispy.app
 import vispy.gloo as gloo
 from vispy.util.transforms import perspective
-from vispy.visuals import TextVisual, transforms
+from vispy.visuals import transforms
+
+# force backend to use gpu
+vispy.use('glfw')
 # Fix for VisPy's DPI bug when using TextVisual
 try:
     import vispy.visuals.transforms as _vtrans
@@ -80,10 +87,12 @@ def load_raw(path, dims, dtype=np.uint16, endian='<'):
     data = data.reshape((dims[2], dims[1], dims[0])).astype(np.float32)
     return data, (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
 
+
 def load_shader(path):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 # ---------------------- GLSL Shaders ----------------------
+
 
 VERTEX_SHADER = load_shader("shaders/vertex_shader.glsl")
 
@@ -232,12 +241,11 @@ class VolumeCanvas(vispy.app.Canvas):
     def on_draw(self, event):
         gloo.clear()
         w, h = self.physical_size
-        aspect = w / float(h)
-        proj = perspective(self._fov, aspect, self._near, self._far)
-
         model = np.eye(4, dtype=np.float32)
-        model = np.dot(model, safe_rotate(self._rotation[0], np.array([1, 0, 0])))
-        model = np.dot(model, safe_rotate(self._rotation[1], np.array([0, 1, 0])))
+        model = np.dot(model, safe_rotate(
+            self._rotation[0], np.array([1, 0, 0])))
+        model = np.dot(model, safe_rotate(
+            self._rotation[1], np.array([0, 1, 0])))
         model = safe_translate(model, [0.0, 0.0, self._translate[2]])
 
         mv = model
