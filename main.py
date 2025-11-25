@@ -1,40 +1,7 @@
-"""
-GPU Volume Renderer (Vispy + OpenGL GLSL)
-
-Single-file example implementing GPU raymarching (direct volume rendering)
-for medical volumes (RAW, MHD/RAW pairs, or simple .raw binary files).
-
-Features:
-- Load .mhd/.raw pairs (via SimpleITK) and raw binary .raw files
-- Upload 3D texture to GPU
-- Raymarching fragment shader (front-to-back compositing)
-- Transfer function (1D colormap texture) and basic Phong lighting
-- Interactive controls: mouse rotate, scroll zoom, keys to adjust steps/opacity
-
-Dependencies:
-- Python 3.8+
-- numpy
-- vispy
-- SimpleITK (for MHD/RAW reading)
-- imageio (optional, for saving screenshots)
-
-Run:
-  python volume_renderer_vispy.py /path/to/volume.mhd
-  or
-  python volume_renderer_vispy.py /path/to/volume.raw --dims 512 512 200 --dtype uint16
-
-Notes:
-- For .mhd files SimpleITK will read spacing/origin and data cleanly.
-- For raw you need to provide dimensions and dtype (use --dims and --dtype).
-- The app creates a 3D texture; large volumes require enough GPU memory.
-
-"""
-
 import sys
 import argparse
 import math
 import time
-import os
 import numpy as np
 import vispy.app
 import vispy.gloo as gloo
@@ -71,6 +38,12 @@ def load_mhd(path):
     img = sitk.ReadImage(path)
     arr = sitk.GetArrayFromImage(img)  # z,y,x with z as slice index
     # convert to z,x,y ordering for convenience (we'll use zyx -> z is depth)
+    is_color = (arr.ndim == 4 and arr.shape[-1] in (3, 4))
+
+    if is_color:
+        print(">>> MHD dataset is TRUE-COLOR (RGB)")
+    else:
+        print(">>> MHD dataset is GRAYSCALE")
     arr = arr.astype(np.float32)
     return arr, img.GetSpacing(), img.GetOrigin()
 
@@ -192,6 +165,13 @@ class VolumeCanvas(vispy.app.Canvas):
             tf[i, 3] = smoothstep(0.0, 1.0, (t - 0.05) / 0.95) * 0.9
         # store in a 2D texture (height 1)
         return np.tile(tf[np.newaxis, :, :], (1, 1, 1)).reshape((1, size, 4))
+    
+    def update_transfer_function(self, new_tf):
+        """
+        new_tf must be shape (1, N, 4) float32 in range [0,1]
+        """
+        self.tf_tex.set_data(new_tf)   # upload to GPU
+        self.update()
 
     def on_timer(self, event):
         self.update()
@@ -213,6 +193,48 @@ class VolumeCanvas(vispy.app.Canvas):
             self.program['u_opacity_scale'] = max(
                 0.01, float(self.program['u_opacity_scale']) - 0.1)
             print('opacity ->', self.program['u_opacity_scale'])
+        elif key == '1':
+            print("TF = grayscale")
+            self.update_transfer_function(self.make_grayscale_tf())   
+        elif key == '2':
+            print("TF = hot colormap")
+            self.update_transfer_function(self.make_hot_tf())
+        elif key == '3':
+            print("TF = segmented bone/soft tissue TF")
+            self.update_transfer_function(self.make_bone_tf())
+   
+    def make_grayscale_tf(self):
+        size = 512
+        tf = np.zeros((1, size, 4), dtype=np.float32)
+        for i in range(size):
+            t = i / (size - 1)
+            tf[0, i, :3] = t
+            tf[0, i, 3] = t
+        return tf
+
+    def make_hot_tf(self):
+        size = 512
+        tf = np.zeros((1, size, 4), dtype=np.float32)
+        for i in range(size):
+            t = i / (size - 1)
+            tf[0, i, 0] = min(1.0, t * 3)
+            tf[0, i, 1] = min(1.0, max(0, t - 1/3) * 3)
+            tf[0, i, 2] = min(1.0, max(0, t - 2/3) * 3)
+            tf[0, i, 3] = t
+        return tf
+
+    def make_bone_tf(self):
+        size = 512
+        tf = np.zeros((1, size, 4), dtype=np.float32)
+        for i in range(size):
+            t = i / (size - 1)
+            if t < 0.15:
+                tf[0, i] = [0, 0, 0, 0]         # invisible soft tissue
+            elif t < 0.4:
+                tf[0, i] = [0.7*t, 0.7*t, 0.7*t, (t-0.15)/0.25]
+            else:
+                tf[0, i] = [1, 1, 1, min(1, (t-0.4)/0.2)]
+        return tf
 
     def on_mouse_wheel(self, event):
         delta = event.delta[1]
@@ -265,9 +287,6 @@ class VolumeCanvas(vispy.app.Canvas):
             self._last_time = now
             # update the window title — simple and reliable
             self.title = f"GPU Volume Renderer — FPS: {self._fps:.1f}"
-            # debug
-            print(f"FPS: {self._fps:.1f}")
-
 
 # small helper function
 
