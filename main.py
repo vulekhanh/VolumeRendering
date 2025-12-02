@@ -138,7 +138,16 @@ class VolumeCanvas(vispy.app.Canvas):
         self.program['u_vol_dims'] = (float(x), float(y), float(z))
         self.program['u_steps'] = 256.0
         self.program['u_opacity_scale'] = 1.0
+        # lighting defaults (Phong / Blinn-Phong)
+        self.program['u_ambient'] = 0.15
+        self.program['u_diffuse'] = 0.8
+        self.program['u_specular'] = 0.25
+        self.program['u_shininess'] = 20.0
+        # default light direction (in model space)
+        self.program['u_light_dir'] = (0.577, 0.577, 0.577)
 
+        # early termination threshold (alpha)
+        self.program['u_terminate_thresh'] = 0.995
         # camera / model transforms (we render the unit cube centered)
         self._fov = 45.0
         self._near = 0.1
