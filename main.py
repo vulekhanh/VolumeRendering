@@ -139,11 +139,15 @@ class VolumeCanvas(vispy.app.Canvas):
         self.program['u_steps'] = 256.0
         self.program['u_opacity_scale'] = 1.0
         # lighting defaults (Phong / Blinn-Phong)
-        self.program['u_ambient'] = 0.9 # constant lighting 
+        self.program['u_ambient'] = 0.8 # constant lighting 
         self.program['u_diffuse'] = 0.8
-        self.program['u_specular'] = 0.125
-        self.program['u_shininess'] = 32.0
+        self.program['u_specular'] = 0.4
+        self.program['u_shininess'] = 96.0
         # default light direction (in model space)
+        # direction, NOT a position
+        # Direction (0,0,1) = shining directly toward the viewer.
+        # Direction (0,1,0) = shining from above.
+        # Direction (1,0,0) = shining from the right.
         self.program['u_light_dir'] = (0.6, 0.6, 0.6)
 
         # early termination threshold (alpha)

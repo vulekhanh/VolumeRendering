@@ -1,5 +1,3 @@
-#version 120
-
 uniform sampler3D u_volume;
 uniform sampler2D u_transfer; // 1D transfer function stored in 2D
 uniform vec3 u_vol_dims; // x,y,z dims (voxels)
